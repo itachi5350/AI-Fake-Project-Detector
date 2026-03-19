@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>RepoScan — AI Fake Project Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #060910;
+    --surface: #0d1117;
+    --surface2: #111820;
+    --border: #1e2d3d;
+    --accent: #00ff9d;
+    --accent2: #0af;
+    --accent3: #ff4d6d;
+    --warn: #ffc94d;
+    --text: #e6f0ff;
+    --muted: #4a6080;
+    --font-display: 'Syne', sans-serif;
+    --font-mono: 'Space Mono', monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .orb { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; opacity: 0.18; }
+  .orb-1 { width: 600px; height: 600px; background: #00ff9d; top: -200px; left: -200px; }
+  .orb-2 { width: 500px; height: 500px; background: #0af; bottom: -100px; right: -100px; }
+  .orb-3 { width: 300px; height: 300px; background: #ff4d6d; top: 50%; left: 50%; transform: translate(-50%,-50%); opacity: 0.08; }
+  .wrapper { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 60px 24px 100px; }
+
+  header { text-align: center; margin-bottom: 60px; animation: fadeDown 0.8s ease both; }
+  .logo-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(0,255,157,0.08); border: 1px solid rgba(0,255,157,0.2);
+    border-radius: 100px; padding: 6px 16px;
+    font-size: 11px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 24px;
+  }
+  .logo-badge .dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+  h1 {
+    font-family: var(--font-display); font-size: clamp(2.4rem, 6vw, 4rem);
+    font-weight: 800; line-height: 1.1; letter-spacing: -1px;
+    background: linear-gradient(135deg, #fff 30%, var(--accent) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 16px;
+  }
+  .subtitle { color: var(--muted); font-size: 13px; letter-spacing: 1px; line-height: 1.8; }
+
+  .input-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 32px; margin-bottom: 40px; animation: fadeUp 0.8s 0.2s ease both;
+    position: relative; overflow: hidden;
+  }
+  .input-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.5;
+  }
+  .input-label { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
+  .input-row { display: flex; gap: 12px; flex-wrap: wrap; }
+  .url-input {
+    flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px; color: var(--text);
+    font-family: var(--font-mono); font-size: 13px; outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .url-input::placeholder { color: var(--muted); }
+  .url-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,255,157,0.1); }
+  .scan-btn {
+    background: var(--accent); color: #060910; border: none; border-radius: 10px;
+    padding: 14px 28px; font-family: var(--font-display); font-size: 14px; font-weight: 700;
+    letter-spacing: 1px; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s; white-space: nowrap;
+  }
+  .scan-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,255,157,0.35); }
+  .scan-btn:active { transform: translateY(0); }
+  .scan-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  #loading { display: none; text-align: center; padding: 48px; animation: fadeUp 0.4s ease both; }
+  .scan-animation { position: relative; width: 80px; height: 80px; margin: 0 auto 24px; }
+  .scan-ring { position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent); animation: spin 1s linear infinite; }
+  .scan-ring:nth-child(2) { inset: 10px; border-top-color: var(--accent2); animation-duration: 1.5s; animation-direction: reverse; }
+  .scan-ring:nth-child(3) { inset: 20px; border-top-color: var(--accent3); animation-duration: 2s; }
+  .scan-dot { position: absolute; inset: 33px; background: var(--accent); border-radius: 50%; animation: pulse 1s infinite; }
+  .loading-text { color: var(--muted); font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
+  .loading-steps { margin-top: 20px; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .loading-step { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 8px; transition: color 0.3s; }
+  .loading-step.active { color: var(--accent); }
+
+  #error-box {
+    display: none; background: rgba(255,77,109,0.08); border: 1px solid rgba(255,77,109,0.3);
+    border-radius: 12px; padding: 20px 24px; color: var(--accent3); font-size: 13px;
+    margin-bottom: 24px; animation: fadeUp 0.4s ease both;
+  }
+
+  #results { display: none; animation: fadeUp 0.6s ease both; }
+
+  .score-hero {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 20px;
+    padding: 48px 32px; text-align: center; position: relative; overflow: hidden; margin-bottom: 24px;
+  }
+  .score-hero::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--score-color, var(--accent)); opacity: 0.8;
+  }
+  .repo-name-display { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--muted); margin-bottom: 32px; }
+  .repo-name-display span { color: var(--accent2); }
+  .score-ring-wrap { position: relative; width: 180px; height: 180px; margin: 0 auto 24px; }
+  .score-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .score-track { fill: none; stroke: var(--border); stroke-width: 8; }
+  .score-fill {
+    fill: none; stroke-width: 8; stroke-linecap: round;
+    stroke-dasharray: 502; stroke-dashoffset: 502;
+    transition: stroke-dashoffset 1.5s cubic-bezier(0.4,0,0.2,1);
+    filter: drop-shadow(0 0 8px var(--score-color, var(--accent)));
+  }
+  .score-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .score-number { font-family: var(--font-display); font-size: 52px; font-weight: 800; line-height: 1; }
+  .score-label { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+  .risk-badge {
+    display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px; border-radius: 100px;
+    font-family: var(--font-display); font-size: 14px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase; border: 1px solid; margin-bottom: 12px;
+  }
+  .risk-low    { color: var(--accent);  border-color: rgba(0,255,157,0.3);  background: rgba(0,255,157,0.07); }
+  .risk-medium { color: var(--warn);    border-color: rgba(255,201,77,0.3); background: rgba(255,201,77,0.07); }
+  .risk-high   { color: var(--accent3); border-color: rgba(255,77,109,0.3); background: rgba(255,77,109,0.07); }
+  .verdict-text { color: var(--muted); font-size: 12px; letter-spacing: 1px; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px 20px; position: relative; overflow: hidden; transition: border-color 0.2s, transform 0.2s;
+  }
+  .stat-card:hover { border-color: var(--accent2); transform: translateY(-3px); }
+  .stat-icon { font-size: 22px; margin-bottom: 12px; }
+  .stat-value { font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .stat-title { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
+
+  .section-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 28px; margin-bottom: 24px; }
+  .section-title {
+    font-family: var(--font-display); font-size: 13px; font-weight: 700; letter-spacing: 3px;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .flags-list { display: flex; flex-direction: column; gap: 10px; }
+  .flag-item {
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+    background: rgba(255,77,109,0.06); border: 1px solid rgba(255,77,109,0.15);
+    border-radius: 10px; font-size: 13px; color: #ffb3c0; animation: slideIn 0.4s ease both;
+  }
+  .no-flags {
+    display: flex; align-items: center; gap: 12px; padding: 20px;
+    background: rgba(0,255,157,0.05); border: 1px solid rgba(0,255,157,0.15);
+    border-radius: 10px; color: var(--accent); font-size: 13px;
+  }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 500px) { .meta-grid { grid-template-columns: 1fr; } }
+  .meta-item { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--surface2); border-radius: 10px; }
+  .meta-key { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .meta-val { font-size: 13px; color: var(--text); word-break: break-all; }
+
+  .scan-again-btn {
+    display: block; width: 100%; background: transparent; border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; color: var(--muted);
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    cursor: pointer; transition: border-color 0.2s, color 0.2s; margin-top: 8px;
+  }
+  .scan-again-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  @keyframes fadeDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeUp   { from { opacity: 0; transform: translateY(20px);  } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideIn  { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes spin     { to { transform: rotate(360deg); } }
+  @keyframes pulse    { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  footer { text-align: center; color: var(--muted); font-size: 11px; letter-spacing: 1px; margin-top: 60px; padding-top: 24px; border-top: 1px solid var(--border); }
+</style>
+</head>
+<body>
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+<div class="orb orb-3"></div>
+
+<div class="wrapper">
+  <header>
+    <div class="logo-badge"><span class="dot"></span> AI-Powered Detection</div>
+    <h1>Repo<br>Scanner</h1>
+    <p class="subtitle">Detect fake, rushed, or AI-generated GitHub projects<br>through commit behavior analysis &amp; scoring.</p>
+  </header>
+
+  <div class="input-card">
+    <div class="input-label">// GitHub Repository URL</div>
+    <div class="input-row">
+      <input class="url-input" id="repoUrl" type="text" placeholder="https://github.com/owner/repository" autocomplete="off" spellcheck="false"/>
+      <button class="scan-btn" id="scanBtn" onclick="runScan()">Scan &rarr;</button>
+    </div>
+  </div>
+
+  <div id="error-box"></div>
+
+  <div id="loading">
+    <div class="scan-animation">
+      <div class="scan-ring"></div>
+      <div class="scan-ring"></div>
+      <div class="scan-ring"></div>
+      <div class="scan-dot"></div>
+    </div>
+    <div class="loading-text">Scanning repository...</div>
+    <div class="loading-steps">
+      <div class="loading-step active" id="step1">🔗 Fetching repo metadata</div>
+      <div class="loading-step" id="step2">📦 Extracting commit history</div>
+      <div class="loading-step" id="step3">🧠 Analyzing commit behavior</div>
+      <div class="loading-step" id="step4">⚡ Calculating authenticity score</div>
+    </div>
+  </div>
+
+  <div id="results"></div>
+</div>
+
+<footer>RepoScan &middot; Powered by FastAPI + Python &middot; Built for devs who value authenticity</footer>
+
+<script>
+  const API_BASE = 'http://localhost:8000';
+
+  function animateSteps() {
+    const steps = ['step1','step2','step3','step4'];
+    let i = 0;
+    return setInterval(() => {
+      steps.forEach(s => document.getElementById(s).classList.remove('active'));
+      document.getElementById(steps[i % steps.length]).classList.add('active');
+      i++;
+    }, 900);
+  }
+
+  function getRiskColor(risk) {
+    if (risk === 'Low')    return 'var(--accent)';
+    if (risk === 'Medium') return 'var(--warn)';
+    return 'var(--accent3)';
+  }
+
+  function getVerdict(risk) {
+    if (risk === 'Low')    return '✅ This project appears authentic and well-developed.';
+    if (risk === 'Medium') return '⚠️ Some suspicious patterns detected — review recommended.';
+    return '🚨 High likelihood of fake or AI-generated project activity.';
+  }
+
+  function showResults(data) {
+    const { metadata, behavior_analysis: ba, authenticity_score, risk_level, flags } = data;
+    const color = getRiskColor(risk_level);
+    const circumference = 502;
+    const offset = circumference - (authenticity_score / 100) * circumference;
+
+    const flagsHtml = flags.length
+      ? flags.map((f, i) => `<div class="flag-item" style="animation-delay:${i*0.1}s"><span>⚠</span>${f}</div>`).join('')
+      : `<div class="no-flags"><span>✅</span> No suspicious patterns detected</div>`;
+
+    const metaItems = [
+      { key: 'Repository',  val: metadata.full_name || `${metadata.owner}/${metadata.name}` },
+      { key: 'Stars',       val: '⭐ ' + (metadata.stargazers_count ?? 0) },
+      { key: 'Forks',       val: '🍴 ' + (metadata.forks_count ?? 0) },
+      { key: 'Language',    val: metadata.language || 'Unknown' },
+      { key: 'Created',     val: metadata.created_at ? metadata.created_at.split('T')[0] : '—' },
+      { key: 'Last Push',   val: metadata.pushed_at  ? metadata.pushed_at.split('T')[0]  : '—' },
+      { key: 'Open Issues', val: metadata.open_issues_count ?? 0 },
+      { key: 'Watchers',    val: metadata.watchers_count ?? 0 },
+    ].map(m => `<div class="meta-item"><span class="meta-key">${m.key}</span><span class="meta-val">${m.val}</span></div>`).join('');
+
+    const statsHtml = [
+      { icon: '📝', val: ba.total_commits,                              label: 'Total Commits' },
+      { icon: '👥', val: ba.unique_contributors,                         label: 'Contributors' },
+      { icon: '📅', val: ba.project_duration_days + 'd',                label: 'Project Age' },
+      { icon: '⚡', val: Math.round(ba.burst_ratio * 100) + '%',        label: 'Burst Ratio' },
+      { icon: '🤖', val: Math.round(ba.generic_commit_ratio * 100) + '%', label: 'Generic Commits' },
+    ].map(s => `<div class="stat-card"><div class="stat-icon">${s.icon}</div><div class="stat-value">${s.val}</div><div class="stat-title">${s.label}</div></div>`).join('');
+
+    document.getElementById('results').innerHTML = `
+      <div class="score-hero" style="--score-color:${color}">
+        <div class="repo-name-display">Scanning: <span>${metadata.full_name || 'repository'}</span></div>
+        <div class="score-ring-wrap">
+          <svg class="score-svg" viewBox="0 0 180 180">
+            <circle class="score-track" cx="90" cy="90" r="80"/>
+            <circle class="score-fill" id="scoreArc" cx="90" cy="90" r="80" style="stroke:${color}; stroke-dashoffset:${circumference}"/>
+          </svg>
+          <div class="score-center">
+            <div class="score-number" style="color:${color}" id="scoreNum">0</div>
+            <div class="score-label">/ 100</div>
+          </div>
+        </div>
+        <div class="risk-badge risk-${risk_level.toLowerCase()}">${risk_level} Risk</div>
+        <div class="verdict-text">${getVerdict(risk_level)}</div>
+      </div>
+      <div class="stats-grid">${statsHtml}</div>
+      <div class="section-card">
+        <div class="section-title">Detection Flags</div>
+        <div class="flags-list">${flagsHtml}</div>
+      </div>
+      <div class="section-card">
+        <div class="section-title">Repository Metadata</div>
+        <div class="meta-grid">${metaItems}</div>
+      </div>
+      <button class="scan-again-btn" onclick="resetUI()">&larr; Scan Another Repository</button>
+    `;
+
+    document.getElementById('results').style.display = 'block';
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const arc = document.getElementById('scoreArc');
+        if (arc) arc.style.strokeDashoffset = offset;
+        let current = 0;
+        const target = authenticity_score;
+        const step = target / 60;
+        const counter = setInterval(() => {
+          current = Math.min(current + step, target);
+          const el = document.getElementById('scoreNum');
+          if (el) el.textContent = Math.round(current);
+          if (current >= target) clearInterval(counter);
+        }, 25);
+      }, 100);
+    });
+  }
+
+  async function runScan() {
+    const url = document.getElementById('repoUrl').value.trim();
+    if (!url) return;
+    const btn = document.getElementById('scanBtn');
+    const errBox = document.getElementById('error-box');
+    const loading = document.getElementById('loading');
+    const results = document.getElementById('results');
+
+    btn.disabled = true;
+    errBox.style.display = 'none';
+    results.style.display = 'none';
+    loading.style.display = 'block';
+
+    const stepInterval = animateSteps();
+
+    try {
+      const res = await fetch(`${API_BASE}/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo_url: url })
+      });
+      clearInterval(stepInterval);
+      loading.style.display = 'none';
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Server error: ' + res.status);
+      }
+      const data = await res.json();
+      showResults(data);
+    } catch (e) {
+      clearInterval(stepInterval);
+      loading.style.display = 'none';
+      errBox.style.display = 'block';
+      errBox.textContent = '⚠ ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function resetUI() {
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('repoUrl').value = '';
+    document.getElementById('repoUrl').focus();
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('repoUrl').addEventListener('keydown', e => {
+      if (e.key === 'Enter') runScan();
+    });
+  });
+</script>
+</body>
+</html>
