@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from app.utils import parse_github_url
-from app.github_service import get_repo_metadata, get_all_commits
-
+from .utils import parse_github_url
+from .github_service import get_repo_metadata, get_all_commits
+from .commit_analyzer import analyze_commits
+from .scoring_engine import calculate_authenticity_score
 app = FastAPI()
 
 class RepoRequest(BaseModel):
@@ -15,7 +16,11 @@ def extract_data(request: RepoRequest):
     metadata = get_repo_metadata(owner, repo)
     commits = get_all_commits(owner, repo)
 
+    analysis = analyze_commits(commits)
+    score_data = calculate_authenticity_score(analysis)
+
     return {
         "metadata": metadata,
-        "total_commits": len(commits)
+        "behavior_analysis": analysis,
+        **score_data
     }
